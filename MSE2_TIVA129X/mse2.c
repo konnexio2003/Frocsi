@@ -37,6 +37,7 @@
 /* XDCtools Header files */
 #include <xdc/std.h>
 #include <xdc/cfg/global.h>
+#include <xdc/runtime/Error.h>
 #include <xdc/runtime/System.h>
 
 /* BIOS Header files */
@@ -54,6 +55,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+
+#include "USBMSC.h"
 
 /* Buffer size used for the file copy process */
 #ifndef CPY_BUFF_SIZE
@@ -123,137 +126,27 @@ void printDrive(const char *driveNumber, FATFS **fatfs)
 }
 
 /*
- *  ======== taskFxn ========
+ *  ======== MSCtaskFxn ========
  *  Task to perform a file copy
  *
- *  Task tries to open an existing file inputfile[]. If the file doesn't
- *  exist, create one and write some known content into it.
- *  The contents of the inputfile[] are then copied to an output file
- *  outputfile[]. Once completed, the contents of the output file are
- *  printed onto the system console (stdout).
  *
  *  Task for this function is created statically. See the project's .cfg file.
  */
-Void taskFxn(UArg arg0, UArg arg1)
+Void MSCtaskFxn(UArg arg0, UArg arg1)
 {
-    FRESULT fresult;
-    SDSPI_Handle sdspiHandle;
-    SDSPI_Params sdspiParams;
 
-    /* Variables to keep track of the file copy progress */
-    unsigned int bytesRead = 0;
-    unsigned int bytesWritten = 0;
-    unsigned int filesize;
-    unsigned int totalBytesCopied = 0;
+	 while (true) {
 
-    /* Mount and register the SD Card */
-    SDSPI_Params_init(&sdspiParams);
-    sdspiHandle = SDSPI_open(Board_SDSPI0, DRIVE_NUM, &sdspiParams);
-    if (sdspiHandle == NULL) {
-        System_abort("Error starting the SD card\n");
-    }
-    else {
-        System_printf("Drive %u is mounted\n", DRIVE_NUM);
-    }
+	        /* Block while the device is NOT connected to the USB */
+		 	USBMSC_waitForConnect(BIOS_WAIT_FOREVER);
 
-    printDrive(STR(DRIVE_NUM), &(dst.fs));
+		 	Task_sleep(100);
 
-    /* Try to open the source file */
-    fresult = f_open(&src, inputfile, FA_READ);
-    if (fresult != FR_OK) {
-        System_printf("Creating a new file \"%s\"...", inputfile);
+	        }
 
-        /* Open file for both reading and writing */
-        fresult = f_open(&src, inputfile, FA_CREATE_NEW|FA_READ|FA_WRITE);
-        if (fresult != FR_OK) {
-            System_printf("Error: \"%s\" could not be created\n",
-                    inputfile);
-            System_abort("Aborting...\n");
-        }
 
-        f_write(&src, textarray, strlen(textarray), &bytesWritten);
-        f_sync(&src);
 
-        /* Reset the internal file pointer */
-        f_lseek(&src, 0);
-
-        System_printf("done\n");
-    }
-    else {
-        System_printf("Using existing copy of \"%s\"\n", inputfile);
-    }
-
-    /* Create a new file object for the file copy */
-    fresult = f_open(&dst, outputfile, FA_CREATE_ALWAYS|FA_WRITE);
-    if (fresult != FR_OK) {
-        System_printf("Error opening \"%s\"\n", outputfile);
-        System_abort("Aborting...\n");
-    }
-    else {
-        System_printf("Starting file copy\n");
-    }
-
-    /*  Copy the contents from the src to the dst */
-    while (true) {
-        /*  Read from source file */
-        fresult = f_read(&src, cpy_buff, CPY_BUFF_SIZE, &bytesRead);
-        if (fresult || bytesRead == 0) {
-            break; /* Error or EOF */
-        }
-
-        /*  Write to dst file */
-        fresult = f_write(&dst, cpy_buff, bytesRead, &bytesWritten);
-        if (fresult || bytesWritten < bytesRead) {
-            System_printf("Disk Full\n");
-            break; /* Error or Disk Full */
-        }
-
-        /*  Update the total number of bytes copied */
-        totalBytesCopied += bytesWritten;
-    }
-
-    f_sync(&dst);
-
-    /* Get the filesize of the source file */
-    filesize = f_size(&src);
-
-    /* Close both inputfile[] and outputfile[] */
-    f_close(&src);
-    f_close(&dst);
-
-    System_printf("File \"%s\" (%u B) copied to \"%s\" (Wrote %u B)\n",
-                  inputfile, filesize, outputfile, totalBytesCopied);
-
-    /* Now output the outputfile[] contents onto the console */
-    fresult = f_open(&dst, outputfile, FA_READ);
-    if (fresult != FR_OK) {
-        System_printf("Error opening \"%s\"\n", outputfile);
-        System_abort("Aborting...\n");
-    }
-
-    /* Print file contents */
-    while (true) {
-        /* Read from output file */
-        fresult = f_read(&dst, cpy_buff, CPY_BUFF_SIZE, &bytesRead);
-        if (fresult || bytesRead == 0) {
-            break; /* Error or EOF */
-        }
-        cpy_buff[bytesRead] = '\0';
-        /* Write output */
-        System_printf("%s", cpy_buff);
-        System_flush();
-    }
-
-    /* Close the file */
-    f_close(&dst);
-
-    printDrive(STR(DRIVE_NUM), &(dst.fs));
-
-    /* Stopping the SDCard */
-    SDSPI_close(sdspiHandle);
-    System_printf("Drive %u unmounted\n", DRIVE_NUM);
-
-    BIOS_exit(0);
+   // BIOS_exit(0);
 }
 
 /*
@@ -265,11 +158,15 @@ int main(void)
     Board_initGeneral();
     Board_initGPIO();
     Board_initSDSPI();
-
+    Board_initUSB(Board_USBDEVICE);
     /* Turn on user LED */
     GPIO_write(Board_LED0, Board_LED_ON);
 
-    System_printf("Starting the FatSD Raw example\n");
+    System_printf("Starting the USB MSC program\nSystem provider "
+                  "is set to SysMin. Halt the target to view any SysMin"
+                  " contents in ROV.\n");
+    System_flush();
+    USBMSC_Init();
 
     /* Start BIOS */
     BIOS_start();
