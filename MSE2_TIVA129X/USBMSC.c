@@ -36,8 +36,7 @@
  * Közben ir olvas
  * Ha kell fordít újra sdcard kezelő
  */
- */
-/*
+ /*
  *  ======== USBKBD.c ========
  */
 
@@ -66,10 +65,15 @@
 #include <usblib/device/usbdevice.h>
 #include <usblib/device/usbdmsc.h>
 #include <ti/sysbios/fatfs/diskio.h>
-/* Example/Board Header files */
+/* Board Header files */
 #include "USBMSC.h"
+#include "Board.h"
+#include <ti/drivers/SDSPI.h>
+#include <ti/sysbios/fatfs/ff.h>
 #define SDCARD_PRESENT          0x00000001
 #define SDCARD_IN_USE           0x00000002
+/* Drive number used for FatFs */
+#define DRIVE_NUM           0
 struct
 {
     uint32_t ui32Flags;
@@ -328,7 +332,7 @@ void USBMSC_Init(void)
 
     gateMSC = GateMutex_create(NULL, &eb);
     if (gateMSC == NULL) {
-        System_abort("Can't create keyboard gate");
+        System_abort("Can't create MSC gate");
     }
 
     gateUSBWait = GateMutex_create(NULL, &eb);
@@ -394,6 +398,11 @@ bool USBMSC_waitForConnect(unsigned int timeout)
 void *
 USBDMSCStorageOpen(uint_fast32_t ui32Drive)
 {
+
+  //  FRESULT fresult;
+    SDSPI_Handle sdspiHandle;
+    SDSPI_Params sdspiParams;
+
     uint_fast32_t ui32Temp;
 
     //ASSERT(ui32Drive == 0);
@@ -405,7 +414,15 @@ USBDMSCStorageOpen(uint_fast32_t ui32Drive)
     {
         return(0);
     }
-
+    /* Mount and register the SD Card */
+        SDSPI_Params_init(&sdspiParams);
+        sdspiHandle = SDSPI_open(Board_SDSPI0, DRIVE_NUM, &sdspiParams);
+        if (sdspiHandle == NULL) {
+            System_abort("Error starting the SD card\n");
+        }
+        else {
+            System_printf("Drive %u is mounted\n", DRIVE_NUM);
+        }
     //
     // Initialize the drive if it is present.
     //
@@ -526,10 +543,14 @@ uint32_t USBDMSCStorageWrite(void * pvDrive,
                                   uint_fast32_t ui32Sector,
                                   uint_fast32_t ui32NumBlocks)
 {
+static	int i=0;
     //ASSERT(pvDrive != 0);
 
     if(disk_write(0, pui8Data, ui32Sector, ui32NumBlocks) == RES_OK)
     {
+    	i++;
+        if (i>2)++
+        	i++;
         return(ui32NumBlocks * 512);
     }
     return(0);
