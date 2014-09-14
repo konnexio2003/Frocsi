@@ -55,12 +55,12 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-
+#include <ti/sysbios/gates/GateMutex.h>
 #include "USBMSC.h"
 
 /* Buffer size used for the file copy process */
 #ifndef CPY_BUFF_SIZE
-#define CPY_BUFF_SIZE       2048
+#define CPY_BUFF_SIZE       600
 #endif
 
 /* String conversion macro */
@@ -82,11 +82,11 @@ const char textarray[] = \
 "If an inputfile already exists, or if the file was already once        \n"
 "generated, then the inputfile will NOT be modified.                    \n"
 "***********************************************************************\n";
-
-unsigned char cpy_buff[CPY_BUFF_SIZE + 1];
+unsigned char cpy_buff[512 + 1];
 FIL src;
 FIL dst;
-
+GateMutex_Handle gateMSC;
+GateMutex_Handle gateUSBWait;
 /*
  *  ======== printDrive ========
  *  Function to print drive information such as the total disk space
@@ -124,10 +124,42 @@ void printDrive(const char *driveNumber, FATFS **fatfs)
                       freeSectorCount  / 2);
     }
 }
+/*
+ *  ========IPtaskFxn ========
+ *  Task to IP sending
+ *
+ *
+ *  Task for this function is created statically. See the project's .cfg file.
+ */
+Void IPTaskFxn(UArg arg0, UArg arg1)
+{
+	unsigned int key;
+    unsigned int bytesRead = 0;
+    unsigned int bytesWritten = 0;
+    unsigned int filesize;
+    unsigned int cursor=0;
+	FRESULT        fresult;
+	Task_sleep(10000);
+	while (true)
+	{
+		key = GateMutex_enter(gateUSBWait);
+		fresult = f_open(&src, outputfile, FA_READ);
+		fresult = f_lseek(&src, cursor);
+		/*  Read from source file */
+		fresult = f_read(&src, cpy_buff, 512, &bytesRead);
+		f_close(&src);
+		GateMutex_leave(gateUSBWait, key);
+		cursor += bytesRead;
+		if (bytesRead == 0) // end of file
+			cursor = 0;
+		Task_sleep(1000);
+	}
 
+
+}
 /*
  *  ======== MSCtaskFxn ========
- *  Task to perform a file copy
+ *  Task to USB connection and reconnection
  *
  *
  *  Task for this function is created statically. See the project's .cfg file.

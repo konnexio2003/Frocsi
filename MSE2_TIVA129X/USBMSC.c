@@ -35,6 +35,9 @@
  * Teszt
  * Közben ir olvas
  * Ha kell fordít újra sdcard kezelő
+ * gat mutex melyik?
+ * tcp/ip
+ *
  */
  /*
  *  ======== USBKBD.c ========
@@ -109,11 +112,9 @@ typedef volatile enum {
 	    //
 	    MSC_DEV_WRITE,
 } USBMSC_USBState;
-
+FATFS FatFs;   /* Work area (file system object) for logical drive */
 /* Static variables and handles */
 static volatile USBMSC_USBState state;
-static GateMutex_Handle gateMSC;
-static GateMutex_Handle gateUSBWait;
 static Semaphore_Handle semMSC;
 static Semaphore_Handle semUSBConnected;
 
@@ -347,7 +348,7 @@ void USBMSC_Init(void)
     USBStackModeSet(0, eUSBModeDevice, 0);
 
     /*
-     * Pass our device information to the USB HID device class driver,
+     * Pass our device information to the USB msc device class driver,
      * initialize the USB controller and connect the device to the bus.
      */
     if (!USBDMSCInit(0, (tUSBDMSCDevice*)&mscDevice)) {
@@ -399,10 +400,10 @@ void *
 USBDMSCStorageOpen(uint_fast32_t ui32Drive)
 {
 
-  //  FRESULT fresult;
+    FRESULT fresult;
     SDSPI_Handle sdspiHandle;
     SDSPI_Params sdspiParams;
-
+    unsigned int key;
     uint_fast32_t ui32Temp;
 
     //ASSERT(ui32Drive == 0);
@@ -426,8 +427,10 @@ USBDMSCStorageOpen(uint_fast32_t ui32Drive)
     //
     // Initialize the drive if it is present.
     //
-    ui32Temp = disk_initialize(0);
 
+    key = GateMutex_enter(gateUSBWait);
+    ui32Temp = disk_initialize(0);
+	GateMutex_leave(gateUSBWait, key);
     if(ui32Temp == RES_OK)
     {
         //
@@ -469,7 +472,7 @@ void
 USBDMSCStorageClose(void * pvDrive)
 {
     uint_fast8_t ui8Power;
-
+    unsigned int key;
     //ASSERT(pvDrive != 0);
 
     //
@@ -485,7 +488,9 @@ USBDMSCStorageClose(void * pvDrive)
     //
     // Turn off the power to the card.
     //
+    key = GateMutex_enter(gateUSBWait);
     disk_ioctl(0, CTRL_POWER, &ui8Power);
+	GateMutex_leave(gateUSBWait, key);
 }
 
 //*****************************************************************************
@@ -510,13 +515,16 @@ uint32_t USBDMSCStorageRead(void * pvDrive,
                                  uint_fast32_t ui32Sector,
                                  uint_fast32_t ui32NumBlocks)
 {
+	unsigned int key;
     //ASSERT(pvDrive != 0);
-
+	key = GateMutex_enter(gateUSBWait);
     if(disk_read (0, pui8Data, ui32Sector, ui32NumBlocks) == RES_OK)
     {
+    	GateMutex_leave(gateUSBWait, key);
         // TODO remove fixed 512
         return(ui32NumBlocks * 512);
     }
+    GateMutex_leave(gateUSBWait, key);
     return(0);
 }
 
@@ -544,15 +552,17 @@ uint32_t USBDMSCStorageWrite(void * pvDrive,
                                   uint_fast32_t ui32NumBlocks)
 {
 static	int i=0;
+unsigned int key;
     //ASSERT(pvDrive != 0);
-
+   char line[82]; /* Line buffer */
+   FRESULT fr;    /* FatFs return code */
+   key = GateMutex_enter(gateUSBWait);
     if(disk_write(0, pui8Data, ui32Sector, ui32NumBlocks) == RES_OK)
     {
-    	i++;
-        if (i>2)++
-        	i++;
-        return(ui32NumBlocks * 512);
+    GateMutex_leave(gateUSBWait, key);
+    return(ui32NumBlocks * 512);
     }
+    GateMutex_leave(gateUSBWait, key);
     return(0);
 }
 
@@ -573,12 +583,13 @@ uint32_t
 USBDMSCStorageNumBlocks(void * pvDrive)
 {
     uint_fast32_t ui32SectorCount;
-
+    unsigned int key;
     //
     // Read the number of sectors.
     //
+    key = GateMutex_enter(gateUSBWait);
     disk_ioctl(0, GET_SECTOR_COUNT, &ui32SectorCount);
-
+    GateMutex_leave(gateUSBWait, key);
     return(ui32SectorCount);
 }
 

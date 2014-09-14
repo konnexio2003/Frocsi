@@ -42,6 +42,7 @@ extern "C" {
 #endif
 
 #include <xdc/std.h>
+#include <ti/sysbios/gates/GateMutex.h>
 
 //*****************************************************************************
 //
@@ -71,6 +72,8 @@ uint32_t USBDMSCStorageNumBlocks(void * pvDrive);
 
 extern bool USBMSC_waitForConnect(unsigned int timeout);
 //extern bool USBKBD_waitForConnect(unsigned int timeout);
+extern  GateMutex_Handle gateMSC;
+extern  GateMutex_Handle gateUSBWait;
 
 #ifdef __cplusplus
 }
