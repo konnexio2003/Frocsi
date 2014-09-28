@@ -140,6 +140,7 @@ Void IPTaskFxn(UArg arg0, UArg arg1)
     unsigned int cursor=0;
 	FRESULT        fresult;
 	Task_sleep(10000);
+	printDrive(STR(DRIVE_NUM), &(src.fs));
 	while (true)
 	{
 		key = GateMutex_enter(gateUSBWait);
