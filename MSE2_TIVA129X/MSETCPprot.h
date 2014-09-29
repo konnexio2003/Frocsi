@@ -35,7 +35,6 @@ typedef struct __attribute__((packed)) _OpenDirCommandType
 uint16_t lenght;
 uint16_t senderid;
 uint8_t	 command;
-uint32_t strtype;
 uint8_t path[1024-9];
 
 }OpenDir_t,*pOpenDir_t, Stat_t,*pStat_t,Delete_t,*pDelete_t;
