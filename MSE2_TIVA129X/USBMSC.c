@@ -38,6 +38,8 @@
  * gat mutex melyik?
  * tcp/ip
  *
+ * DEBUG disk műveletekre és teszt
+ *
  */
  /*
  *  ======== USBKBD.c ========
@@ -117,6 +119,7 @@ FATFS FatFs;   /* Work area (file system object) for logical drive */
 static volatile USBMSC_USBState state;
 static Semaphore_Handle semMSC;
 static Semaphore_Handle semUSBConnected;
+static int wren=0;
 
 /* Function prototypes */
 static USBMSCEventType cbMSCHandler(void *cbData, USBMSCEventType event,
@@ -244,7 +247,7 @@ const tUSBDHIDKeyboardDevice keyboardDevice =
  *  Callback handler for the USB stack.
  *
  *  Callback handler call by the USB stack to notify us on what has happened in
- *  regards to the keyboard.
+ *  regards to the MSC.
  *
  *  @param(cbData)          A callback pointer provided by the client.
  *
@@ -261,6 +264,7 @@ static USBMSCEventType cbMSCHandler(void *cbData, USBMSCEventType event,
          void *eventMsgPtr)
 
 {
+int test=0;
     /* Determine what event has happened */
     switch (event) {
         case USB_EVENT_CONNECTED:
@@ -284,10 +288,13 @@ static USBMSCEventType cbMSCHandler(void *cbData, USBMSCEventType event,
         case USBD_MSC_EVENT_IDLE:
         default:
         {
+        	test++;
             break;
+
         }
     }
-
+if (test>0)
+	;
     return (0);
 }
 
@@ -491,6 +498,7 @@ USBDMSCStorageClose(void * pvDrive)
     key = GateMutex_enter(gateUSBWait);
     disk_ioctl(0, CTRL_POWER, &ui8Power);
 	GateMutex_leave(gateUSBWait, key);
+	System_printf("MSC Storage close /n");
 }
 
 //*****************************************************************************
@@ -522,9 +530,12 @@ uint32_t USBDMSCStorageRead(void * pvDrive,
     {
     	GateMutex_leave(gateUSBWait, key);
         // TODO remove fixed 512
+if (wren)
+    	System_printf("Read Sector: %d Blocks:%d\n", ui32Sector, ui32NumBlocks) ;
         return(ui32NumBlocks * 512);
     }
     GateMutex_leave(gateUSBWait, key);
+    System_printf("Read Sector: 0 reading\n") ;
     return(0);
 }
 
@@ -552,17 +563,32 @@ uint32_t USBDMSCStorageWrite(void * pvDrive,
                                   uint_fast32_t ui32NumBlocks)
 {
 static	int i=0;
-unsigned int key;
+unsigned int key,key1;
+wren=1;
     //ASSERT(pvDrive != 0);
    char line[82]; /* Line buffer */
    FRESULT fr;    /* FatFs return code */
+   key1 = GateMutex_enter(gateMSC);
    key = GateMutex_enter(gateUSBWait);
+
     if(disk_write(0, pui8Data, ui32Sector, ui32NumBlocks) == RES_OK)
     {
-    GateMutex_leave(gateUSBWait, key);
+    	GateMutex_leave(gateUSBWait, key);
+    System_printf("Write ** Sector: %d Blocks:%d\n", ui32Sector, ui32NumBlocks) ;
+	if ((ui32Sector >9437 && ui32Sector < 17007) || (ui32Sector==8193))
+	{
+		GateMutex_leave(gateMSC, key1);
+		System_printf("Gate Leave..\n") ;
+	}
     return(ui32NumBlocks * 512);
     }
     GateMutex_leave(gateUSBWait, key);
+    if ((ui32Sector >9437 && ui32Sector < 17007) || (ui32Sector==8193))
+        {
+        	GateMutex_leave(gateMSC, key1);
+        	 System_printf("Gate Leave out\n") ;
+        }
+    System_printf("Write 0 success\n") ;
     return(0);
 }
 
@@ -589,6 +615,7 @@ USBDMSCStorageNumBlocks(void * pvDrive)
     //
     key = GateMutex_enter(gateUSBWait);
     disk_ioctl(0, GET_SECTOR_COUNT, &ui32SectorCount);
+    System_printf("MSC Numblocks read: %d \n",ui32SectorCount ) ;
     GateMutex_leave(gateUSBWait, key);
     return(ui32SectorCount);
 }

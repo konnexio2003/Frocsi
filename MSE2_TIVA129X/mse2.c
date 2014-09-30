@@ -153,14 +153,16 @@ Void IPTaskFxn(UArg arg0, UArg arg1)
 	DIR dir;
 	FILINFO fno;
 #if _USE_LFN
-    static char lfn[_MAX_LFN + 1];   /* Buffer to store the LFN */
-    fno.lfname = lfn;
-    fno.lfsize = sizeof lfn;
+    static char lfntmp[_MAX_LFN + 1];   /* Buffer to store the LFN */
 #endif
+
 	int nbytes;
 	unsigned int testi;
 	bool flag = true;
 	char *buffer;
+	unsigned int counttmp;
+	uint32_t fromtmp;
+
 	Error_Block eb;
 	pCommand_t commd;
 	pOpenDir_t odircommand;
@@ -210,154 +212,155 @@ Void IPTaskFxn(UArg arg0, UArg arg1)
     					//Receive COMMAND
     					odircommand = (pOpenDir_t)buffer;
     					System_printf("hossz: %d senderid: %d parancs:  %d dir: %s\n "
-    							 ,ntohs(odircommand->lenght),ntohs(odircommand->senderid)
+    							 ,odircommand->lenght,odircommand->senderid
     							,odircommand->command, odircommand->path);
     					key = GateMutex_enter(gateUSBWait);
     					fresult = f_opendir(&dir, odircommand->path);
     					GateMutex_leave(gateUSBWait, key);
-
     					//Send Answer
     					odiranswer=(pOpenDirA_t)buffer;
-    					odiranswer->lenght=htons(6);
-    					odiranswer->senderid=htons(SENDERID);
-    					odiranswer->fresult=htons(fresult);
-    					testi=sizeof(OpenDirA_t);
-    					send(clientfd, (char *)buffer, sizeof(OpenDirA_t), 0 );
-
+    					odiranswer->lenght=sizeof(OpenDirA_t);
+    					odiranswer->senderid=SENDERID;
+    					odiranswer->fresult=fresult;
+     					send(clientfd, (char *)buffer, sizeof(OpenDirA_t), 0 );
 						System_printf("hossz: %d senderid: %d fresult: %d\n "
-								 ,ntohs(odiranswer->lenght ),ntohs(odiranswer->senderid)
-								,ntohs(odiranswer->fresult));
+								 ,odiranswer->lenght ,odiranswer->senderid
+								,odiranswer->fresult);
     					break;
     				case CLOSEDIR:
 						//Receive COMMAND
     					cdircommand = (pCloseDir_t)buffer;
 						System_printf("hossz: %d senderid: %d parancs: %d \n "
-								 ,ntohs(cdircommand->lenght ),ntohs(cdircommand->senderid)
+								 ,cdircommand->lenght, cdircommand->senderid
 								,cdircommand->command);
-
 						//Send Answer
 						cdiranswer=(pCloseDirA_t)buffer;
-						cdiranswer->lenght=htons(6);
-						cdiranswer->senderid=htons(SENDERID);
-						cdiranswer->fresult=htons(FR_OK);
+						cdiranswer->lenght=sizeof(CloseDirA_t);
+						cdiranswer->senderid=SENDERID;
+						cdiranswer->fresult=FR_OK;
 						send(clientfd, (char *)buffer, sizeof(CloseDirA_t), 0 );
 						System_printf("hossz: %d senderid: %d fresult: %d\n "
-								 ,ntohs(cdiranswer->lenght ),ntohs(cdiranswer->senderid)
+								 ,cdiranswer->lenght ,cdiranswer->senderid
 								,cdiranswer->fresult);
 						break;
-
     				case READDIR:
 						//Receive COMMAND
     					rdircommand = (pReadDir_t)buffer;
 						System_printf("hossz: %d senderid: %d parancs: %d \n "
-								 ,ntohs(rdircommand->lenght ),ntohs(rdircommand->senderid)
+								 ,rdircommand->lenght ,rdircommand->senderid
 								,rdircommand->command);
+						rdiranswer=(pReadDirA_t)buffer;
+						#if _USE_LFN
+						fno.lfname = rdiranswer->dirdata;
+						fno.lfsize = sizeof (rdiranswer->dirdata);
+						#endif
 						key = GateMutex_enter(gateUSBWait);
 						fresult = f_readdir(&dir, &fno);
 						GateMutex_leave(gateUSBWait, key);
 						//Send Answer
-						rdiranswer=(pReadDirA_t)buffer;
-						rdiranswer->lenght=htons(32);
-						rdiranswer->senderid=htons(SENDERID);
-						rdiranswer->fresult=htons(fresult);
+						rdiranswer->lenght=strlen(rdiranswer->dirdata)+38; //26
+						rdiranswer->senderid=SENDERID;
+						rdiranswer->fresult=fresult;
 						rdiranswer->fileinfo.fattrib=fno.fattrib;
-						rdiranswer->fileinfo.fdate=htons(fno.fdate);
+						rdiranswer->fileinfo.fdate=fno.fdate;
 						strcpy(rdiranswer->fileinfo.fname,fno.fname);
-						rdiranswer->fileinfo.fsize=htonl(fno.fsize);
-						rdiranswer->fileinfo.ftime=htons(fno.ftime);
-						testi=sizeof(ReadDirA_t);
-						send(clientfd, (char *)buffer,sizeof(ReadDirA_t), 0 );
+						rdiranswer->fileinfo.fsize=fno.fsize;
+						rdiranswer->fileinfo.ftime=fno.ftime;
+						send(clientfd, (char *)buffer,rdiranswer->lenght, 0 );
 						System_printf("hossz: %d senderid: %d fresult: %d\n "
-								 ,ntohs(rdiranswer->lenght ),ntohs(rdiranswer->senderid)
+								 ,rdiranswer->lenght, rdiranswer->senderid
 								,rdiranswer->fresult);
 						break;
     				case STAT:
 						//Receive COMMAND
 						statcommand = (pStat_t)buffer;
 						System_printf("hossz: %d senderid: %d parancs:  %d dir: %s\n "
-								 ,ntohs(statcommand->lenght),ntohs(statcommand->senderid)
+								 ,statcommand->lenght, statcommand->senderid
 								,statcommand->command, statcommand->path);
+						strcpy(lfntmp,statcommand->path);
+						statanswer=(pStatA_t)buffer;
+						#if _USE_LFN
+						fno.lfname = statanswer->dirdata;
+						fno.lfsize = sizeof (statanswer->dirdata);
+						#endif
 						key = GateMutex_enter(gateUSBWait);
-						fresult = f_stat(statcommand->path, &fno);
+						fresult = f_stat(lfntmp, &fno);
 						GateMutex_leave(gateUSBWait, key);
 						//Send Answe
-						statanswer=(pStatA_t)buffer;
-						statanswer->lenght=htons(sizeof(StatA_t));
-						statanswer->senderid=htons(SENDERID);
-						statanswer->fresult=htons(fresult);
+
+						statanswer->lenght=strlen(statanswer->dirdata)+38;
+						statanswer->senderid=SENDERID;
+						statanswer->fresult=fresult;
 						statanswer->fileinfo.fattrib=fno.fattrib;
-						statanswer->fileinfo.fdate=htons(fno.fdate);
+						statanswer->fileinfo.fdate=fno.fdate;
 						strcpy(statanswer->fileinfo.fname,fno.fname);
-						statanswer->fileinfo.fsize=htonl(fno.fsize);
-						statanswer->fileinfo.ftime=htons(fno.ftime);
-						statanswer->fsize=htonl(fno.fsize);
-						send(clientfd, (char *)buffer, sizeof(StatA_t), 0 );
+						statanswer->fileinfo.fsize=fno.fsize;
+						statanswer->fileinfo.ftime=fno.ftime;
+						send(clientfd, (char *)buffer, statanswer->lenght, 0 );
 
 						System_printf("hossz: %d senderid: %d fresult: %d\n "
-								 ,ntohs(statanswer->lenght ),ntohs(statanswer->senderid)
-								,ntohs(statanswer->fresult));
+								 ,statanswer->lenght, statanswer->senderid
+								,statanswer->fresult);
 						break;
     				case OPEN:
 						//Receive COMMAND
 						opencommand = (pOpen_t)buffer;
 						System_printf("hossz: %d senderid: %d parancs: %d mode: %d date: %d time: %d path: %s \n "
-								 ,ntohs(opencommand->lenght ),ntohs(opencommand->senderid)
-								,opencommand->command,opencommand->mode, ntohs(opencommand->date)
-								,ntohs(opencommand->time),opencommand->path );
+								 ,opencommand->lenght, opencommand->senderid
+								,opencommand->command,opencommand->mode, opencommand->date
+								,opencommand->time, opencommand->path );
 						key = GateMutex_enter(gateUSBWait);
 						fresult = f_open(&src, opencommand->path,opencommand->mode);
 						GateMutex_leave(gateUSBWait, key);
 						//Send Answer
 						openanswer=(pOpenA_t)buffer;
-						openanswer->lenght=htons(32);
-						openanswer->senderid=htons(SENDERID);
-						openanswer->fresult=htons(fresult);
-						//testi=sizeof(OpenDirA_t);
+						openanswer->lenght=sizeof(OpenA_t);
+						openanswer->senderid=SENDERID;
+						openanswer->fresult=fresult;
 						send(clientfd, (char *)buffer, sizeof(OpenA_t), 0 );
 						System_printf("hossz: %d senderid: %d fresult: %d\n "
-								 ,ntohs(openanswer->lenght ),ntohs(openanswer->senderid)
+								 ,openanswer->lenght, openanswer->senderid
 								,openanswer->fresult);
 						break;
     				case CLOSE:
 						//Receive COMMAND
 						closecommand = (pClose_t)buffer;
 						System_printf("hossz: %d senderid: %d parancs: %d \n "
-								 ,ntohs(closecommand->lenght ),ntohs(closecommand->senderid)
+								 ,closecommand->lenght, closecommand->senderid
 								,closecommand->command);
 						key = GateMutex_enter(gateUSBWait);
 						fresult = f_close(&src);
 						GateMutex_leave(gateUSBWait, key);
 						//Send Answer
 						closeanswer=(pCloseA_t)buffer;
-						closeanswer->lenght=htons(6);
-						closeanswer->senderid=htons(SENDERID);
-						closeanswer->fresult=htons(fresult);
+						closeanswer->lenght=sizeof(CloseA_t);
+						closeanswer->senderid=SENDERID;
+						closeanswer->fresult=fresult;
 						send(clientfd, (char *)buffer, sizeof(CloseA_t), 0 );
 						System_printf("hossz: %d senderid: %d fresult: %d\n "
-								 ,ntohs(closeanswer->lenght ),ntohs(closeanswer->senderid)
+								 ,closeanswer->lenght, closeanswer->senderid
 								,closeanswer->fresult);
 						break;
     				case READ:
 						//Receive COMMAND
 						readcommand = (pRead_t)buffer;
 						System_printf("hossz: %d senderid: %d parancs: %d from: %d count: %d \n "
-								 ,ntohs(readcommand->lenght ),ntohs(readcommand->senderid)
-								,readcommand->command,ntohs(readcommand->from), ntohs(readcommand->count));
+								 ,readcommand->lenght, readcommand->senderid
+								,readcommand->command, readcommand->from, readcommand->count);
+						fromtmp=readcommand->from;
+						counttmp=readcommand->count;
+						readanswer=(pReadA_t)buffer;
 						key = GateMutex_enter(gateUSBWait);
-						fresult=f_lseek(&src,htons(readcommand->from));
-						fresult = f_read(&src,readanswer->data,htons(readcommand->count),readanswer->count );
+						fresult=f_lseek(&src,fromtmp);
+						fresult = f_read(&src,&readanswer->data, counttmp, &readanswer->count );
 						GateMutex_leave(gateUSBWait, key);
 						//Send Answer
-						readanswer=(pReadA_t)buffer;
-						readanswer->lenght=htons(32);
-						readanswer->senderid=htons(SENDERID);
-						readanswer->fresult=htons(fresult);
-						readanswer->count=htons(readanswer->count);
-						//strcpy(readanswer->data,"adat5678901234567890\0");
-						testi=sizeof(readanswer);
-						send(clientfd, (char *)buffer, sizeof(ReadA_t), 0 );
+						readanswer->lenght=8+readanswer->count;
+						readanswer->senderid=SENDERID;
+						readanswer->fresult=fresult;
+						send(clientfd, (char *)buffer, readanswer->lenght, 0 );
 						System_printf("hossz: %d senderid: %d fresult: %d\n "
-								 ,ntohs(readanswer->lenght ),ntohs(readanswer->senderid)
+								 ,readanswer->lenght, readanswer->senderid
 								,readanswer->fresult);
 						break;
 
@@ -367,7 +370,7 @@ Void IPTaskFxn(UArg arg0, UArg arg1)
     					odircommand = (pOpenDir_t)buffer;
     					//testi= odircommand->lenght;
     					System_printf("hossz: %d senderid:%d parancs: %d\n"
-    					,ntohs(odircommand->lenght), ntohs(odircommand->senderid), odircommand->command);
+    					,odircommand->lenght, odircommand->senderid, odircommand->command);
     					/* Echo the data back */
     					send(clientfd, (char *)buffer, nbytes, 0 );
     					break;
@@ -381,6 +384,7 @@ Void IPTaskFxn(UArg arg0, UArg arg1)
     			}
     			else {
     				fdClose(clientfd);
+    				fdCloseSession(TaskSelf());//mcitest csak
     				//flag = false;
     			}
     		}

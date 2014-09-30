@@ -56,7 +56,7 @@ typedef struct __attribute__((packed)) _ReadCommandType
 uint16_t lenght;
 uint16_t senderid;
 uint8_t	 command;
-uint16_t from;
+uint32_t from;
 uint16_t count;
 }Read_t,*pRead_t;
 
@@ -95,7 +95,7 @@ uint16_t lenght;
 uint16_t senderid;
 uint16_t fresult;
 FILINFO fileinfo;
-uint32_t fsize;
+uint8_t dirdata [1024-38];
 
 }ReadDirA_t,*pReadDirA_t, StatA_t,*pStatA_t;//,OpenA_t,*pOpenA_t,CloseA_t,*pCloseA_t
 
